@@ -1,29 +1,44 @@
 #!/bin/bash
-# VPS Deploy Bot Installer
 
+# ================= Check Root =================
 if [[ $EUID -ne 0 ]]; then
-   echo "Run as root"
+   echo "This script must be run as root"
    exit 1
 fi
 
+# ================= Variables =================
+BOT_DIR="$HOME/vps-deploy-bot"
+GITHUB_REPO_RAW="https://raw.githubusercontent.com/StriderCraft315/Vps-Depoloy-Bot/main"
+BOT_PY="bot.py"
+REQUIREMENTS="requirements.txt"
+
+# ================= Update System =================
 apt update && apt upgrade -y
+
+# ================= Install Dependencies =================
 apt install -y python3 python3-pip docker.io git
 
-docker --version || systemctl start docker
+# ================= Start Docker if not running =================
+systemctl enable docker
+systemctl start docker
 
-# Clone repo
-if [ -d "vps-deploy-bot" ]; then
-    cd vps-deploy-bot && git pull
-else
-    git clone https://github.com/StriderCraft315/Vps-Depoloy-Bot.git vps-deploy-bot
-    cd vps-deploy-bot
-fi
+# ================= Create Bot Directory =================
+mkdir -p "$BOT_DIR"
+cd "$BOT_DIR" || exit
 
+# ================= Download Files =================
+echo "Downloading bot.py and requirements.txt..."
+curl -s "$GITHUB_REPO_RAW/$BOT_PY" -o "$BOT_PY"
+curl -s "$GITHUB_REPO_RAW/$REQUIREMENTS" -o "$REQUIREMENTS"
+
+# ================= Install Python Modules =================
 pip3 install --upgrade pip
-pip3 install -r requirements.txt || pip3 install discord.py docker apscheduler
+pip3 install -r "$REQUIREMENTS"
 
-# Ask for token
+# ================= Set Discord Bot Token =================
 read -p "Enter your Discord bot token: " BOT_TOKEN
-sed -i "s|TOKEN = .*|TOKEN = \"$BOT_TOKEN\"|" bot.py
+sed -i "s|YOUR_BOT_TOKEN|$BOT_TOKEN|g" "$BOT_PY"
 
-echo "✅ Installation complete. Your bot.py is in: $(pwd)"
+echo "✅ Installation complete!"
+echo "To run the bot, use:"
+echo "cd $BOT_DIR && python3 bot.py"
