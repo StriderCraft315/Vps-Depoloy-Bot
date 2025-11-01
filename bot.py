@@ -6,11 +6,12 @@ import sqlite3
 from datetime import datetime, timedelta
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import docker
+import asyncio
 
 # ================= CONFIG =================
 TOKEN = "YOUR_BOT_TOKEN"  # Will be replaced by installer
 GUILD_ID = 123456789012345678  # Replace with your guild/server ID
-ADMIN_IDS = [1421860082894766183]  # default admin
+ADMIN_IDS = [1421860082894766183]  # Default admin
 VPS_USER_ROLE_ID = 1434000306357928047
 
 LOG_CHANNEL_ID = None
@@ -42,7 +43,7 @@ c.execute('''CREATE TABLE IF NOT EXISTS config
              (key TEXT PRIMARY KEY, value TEXT)''')
 conn.commit()
 
-# ================= DOCKER =================
+# ================= DOCKER CLIENT =================
 client = docker.from_env()
 
 # ================= SCHEDULER =================
@@ -59,7 +60,7 @@ def log_action(action, actor_id, target_id=None):
             msg = f"**{action}** by <@{actor_id}>"
             if target_id:
                 msg += f" on <@{target_id}>"
-            import asyncio; asyncio.create_task(channel.send(msg))
+            asyncio.create_task(channel.send(msg))
 
 def next_vps_number(user_id):
     c.execute('SELECT MAX(vps_number) FROM vps WHERE user_id=?', (user_id,))
@@ -197,36 +198,29 @@ async def remove(interaction: Interaction, user: discord.User, vps_number: int):
     await interaction.followup.send(f"✅ VPS#{vps_number} removed.", ephemeral=True)
 # ================= MANAGE VPS =================
 @tree.command(name="manage", description="🛠️ Manage your VPS")
-@app_commands.describe(vps_number="Optional VPS number to manage (Admins can select user VPSes)")
+@app_commands.describe(vps_number="Optional VPS number (Admins can manage others)")
 async def manage(interaction: Interaction, vps_number: int = None):
     await interaction.response.defer(ephemeral=True)
-    guild = bot.get_guild(GUILD_ID)
     user = interaction.user
 
-    # Admin option to manage others
-    if vps_number is None:
-        c.execute('SELECT vps_number, user_id FROM vps WHERE user_id=?', (user.id,))
+    # Admin can manage any VPS if number provided
+    if vps_number and is_admin(user.id):
+        c.execute('SELECT vps_number,user_id,container_id,status FROM vps WHERE vps_number=?', (vps_number,))
     else:
-        if is_admin(user.id):
-            c.execute('SELECT vps_number, user_id FROM vps WHERE vps_number=?', (vps_number,))
-        else:
-            c.execute('SELECT vps_number, user_id FROM vps WHERE user_id=? AND vps_number=?', (user.id, vps_number))
+        c.execute('SELECT vps_number,user_id,container_id,status FROM vps WHERE user_id=?', (user.id,))
     rows = c.fetchall()
     if not rows:
         await interaction.followup.send("❌ No VPS found.", ephemeral=True)
         return
 
-    # Create a dropdown menu for VPS selection
     options = [discord.SelectOption(label=f"VPS#{r[0]} - UserID:{r[1]}", value=str(r[0])) for r in rows]
-    select = Select(placeholder="Select VPS", options=options)
+    select = discord.ui.Select(placeholder="Select VPS", options=options)
 
     async def select_callback(sel_inter: Interaction):
         selected = int(sel_inter.data["values"][0])
         c.execute('SELECT container_id,status FROM vps WHERE vps_number=?', (selected,))
         row = c.fetchone()
-        status = row[1]
-        container_id = row[0]
-
+        container_id, status = row
         view = View()
         view.add_item(Button(label="Start", style=discord.ButtonStyle.green, custom_id=f"start_{selected}"))
         view.add_item(Button(label="Stop", style=discord.ButtonStyle.red, custom_id=f"stop_{selected}"))
@@ -282,13 +276,12 @@ async def manage_shared(interaction: Interaction):
         return
 
     options = [discord.SelectOption(label=f"VPS#{r[0]} - Owner:{r[1]}", value=str(r[0])) for r in rows]
-    select = Select(placeholder="Select shared VPS", options=options)
+    select = discord.ui.Select(placeholder="Select shared VPS", options=options)
 
     async def shared_select_callback(sel_inter: Interaction):
         selected = int(sel_inter.data["values"][0])
         c.execute('SELECT container_id,status FROM vps WHERE vps_number=?', (selected,))
-        row = c.fetchone()
-        status = row[1]
+        container_id, status = c.fetchone()
         view = View()
         view.add_item(Button(label="SSH / tmate", style=discord.ButtonStyle.gray, custom_id=f"ssh_{selected}"))
         await sel_inter.response.send_message(f"Shared VPS#{selected} (Status: {status})", view=view, ephemeral=True)
@@ -306,7 +299,6 @@ async def port_give(interaction: Interaction, user: discord.User, vps_number: in
         await interaction.response.send_message("❌ Admin only.", ephemeral=True)
         return
     await interaction.response.defer(ephemeral=True)
-    # For simplicity, we just log port assignment
     log_action("port_give", interaction.user.id, user.id)
     await interaction.followup.send(f"✅ Port {port} assigned to VPS#{vps_number} for {user.mention}", ephemeral=True)
 # ================= ADMIN ADD =================
@@ -358,9 +350,6 @@ def auto_suspend_expired():
             conn.commit()
             log_action("auto_suspend", 0, user_id)
 
-scheduler.add_job(auto_suspend_expired, 'interval', minutes=5)
-scheduler.start()
-
 # ================= BOT STARTUP =================
 @bot.event
 async def on_ready():
@@ -372,6 +361,11 @@ async def on_ready():
     else:
         await tree.sync()
     print("✅ Commands synced")
+    
+    # Start the scheduler inside the bot event loop
+    if not scheduler.running:
+        scheduler.start()
+        print("✅ Scheduler started")
 
 # ================= RUN BOT =================
 bot.run(TOKEN)
