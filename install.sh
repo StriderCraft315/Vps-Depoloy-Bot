@@ -1,44 +1,57 @@
 #!/bin/bash
+# VPS Deploy Bot Installer (Patched Version)
 
-# ================= Check Root =================
+set -e
+
+# --- Root Check ---
 if [[ $EUID -ne 0 ]]; then
-   echo "This script must be run as root"
+   echo "❌ Please run this installer as root!"
    exit 1
 fi
 
-# ================= Variables =================
-BOT_DIR="$HOME/vps-deploy-bot"
-GITHUB_REPO_RAW="https://raw.githubusercontent.com/StriderCraft315/Vps-Depoloy-Bot/main"
-BOT_PY="bot.py"
-REQUIREMENTS="requirements.txt"
+# --- System Update ---
+echo "🔄 Updating system..."
+apt update -y && apt upgrade -y
 
-# ================= Update System =================
-apt update && apt upgrade -y
+# --- Dependencies ---
+echo "📦 Installing dependencies..."
+apt install -y python3 python3-pip docker.io git curl
 
-# ================= Install Dependencies =================
-apt install -y python3 python3-pip docker.io git
-
-# ================= Start Docker if not running =================
+# --- Ensure Docker is running ---
+echo "🐳 Starting Docker..."
 systemctl enable docker
 systemctl start docker
 
-# ================= Create Bot Directory =================
-mkdir -p "$BOT_DIR"
-cd "$BOT_DIR" || exit
+# --- Clone or Update Repository ---
+if [ -d "/root/vps-deploy-bot" ]; then
+  echo "📁 Existing installation found. Updating..."
+  cd /root/vps-deploy-bot && git pull
+else
+  echo "⬇️ Cloning repository..."
+  git clone https://github.com/StriderCraft315/Vps-Depoloy-Bot.git /root/vps-deploy-bot
+  cd /root/vps-deploy-bot
+fi
 
-# ================= Download Files =================
-echo "Downloading bot.py and requirements.txt..."
-curl -s "$GITHUB_REPO_RAW/$BOT_PY" -o "$BOT_PY"
-curl -s "$GITHUB_REPO_RAW/$REQUIREMENTS" -o "$REQUIREMENTS"
-
-# ================= Install Python Modules =================
+# --- Python Dependencies ---
+echo "🐍 Installing Python dependencies..."
 pip3 install --upgrade pip
-pip3 install -r "$REQUIREMENTS"
+pip3 install -r requirements.txt || {
+  echo "⚠️ requirements.txt failed — installing manually..."
+  pip3 install discord.py docker apscheduler aiofiles
+}
 
-# ================= Set Discord Bot Token =================
-read -p "Enter your Discord bot token: " BOT_TOKEN
-sed -i "s|YOUR_BOT_TOKEN|$BOT_TOKEN|g" "$BOT_PY"
+# --- Ask for Bot Token ---
+echo ""
+read -p "🤖 Enter your Discord Bot Token: " BOT_TOKEN
+read -p "🏠 Enter your Discord Guild (Server) ID: " GUILD_ID
 
-echo "✅ Installation complete!"
-echo "To run the bot, use:"
-echo "cd $BOT_DIR && python3 bot.py"
+# --- Insert into bot.py ---
+echo "🧠 Writing token and guild ID into bot.py..."
+sed -i "s|TOKEN = .*|TOKEN = \"$BOT_TOKEN\"|" bot.py
+sed -i "s|GUILD_ID = .*|GUILD_ID = $GUILD_ID|" bot.py
+
+# --- Run the Bot ---
+echo ""
+echo "✅ Installation Complete!"
+echo "To start the bot, run:"
+echo "cd /root/vps-deploy-bot && python3 bot.py"
