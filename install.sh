@@ -21,8 +21,14 @@ fi
 
 # Install Python requirements
 pip3 install --upgrade pip
-pip3 install -r requirements.txt
-
+pip3 install discord
+pip3 install apscheduler
+pip3 install aiosqlite
+pip3 install discord.py
+pip3 install apscheduler
+pip3 install aiosqlite
+pip3 install psutil
+pip3 install requests
 # Instructions for user
 echo "Installation complete!"
 echo "1. Edit bot.py to set your TOKEN and GUILD_ID."
