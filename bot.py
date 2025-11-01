@@ -1,6 +1,7 @@
 import discord
 from discord import app_commands, Interaction
 from discord.ui import View, Button, Select
+from typing import Optional
 import asyncio
 import random
 import string
