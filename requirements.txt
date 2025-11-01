@@ -1,3 +1,5 @@
 discord.py
 docker
 apscheduler
+aiofiles
+requests
