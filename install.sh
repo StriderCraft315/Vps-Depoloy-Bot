@@ -1,52 +1,29 @@
 #!/bin/bash
+# VPS Deploy Bot Installer
 
-# ================= INSTALL SCRIPT =================
-set -e
-
-# Ensure script is run as root
 if [[ $EUID -ne 0 ]]; then
-   echo "This script must be run as root"
+   echo "Run as root"
    exit 1
 fi
 
-echo "🔄 Updating system..."
 apt update && apt upgrade -y
+apt install -y python3 python3-pip docker.io git
 
-echo "📦 Installing dependencies..."
-apt install -y python3 python3-pip git docker.io
+docker --version || systemctl start docker
 
-echo "🛠 Enabling Docker..."
-systemctl enable docker
-systemctl start docker
-
-# ---------------- GitHub Repo ----------------
-REPO_URL="https://github.com/StriderCraft315/Vps-Depoloy-Bot.git"
-DIR_NAME="vps-deploy-bot"
-
-if [ -d "$DIR_NAME" ]; then
-    echo "📂 Repo already exists. Pulling latest changes..."
-    cd "$DIR_NAME"
-    git pull
+# Clone repo
+if [ -d "vps-deploy-bot" ]; then
+    cd vps-deploy-bot && git pull
 else
-    echo "📂 Cloning repo..."
-    git clone "$REPO_URL" "$DIR_NAME"
-    cd "$DIR_NAME"
+    git clone https://github.com/StriderCraft315/Vps-Depoloy-Bot.git vps-deploy-bot
+    cd vps-deploy-bot
 fi
 
-# ---------------- Bot Token ----------------
-read -p "🔑 Enter your Discord Bot Token: " BOT_TOKEN
-
-# Replace TOKEN placeholder in bot.py
-sed -i "s|TOKEN = \".*\"|TOKEN = \"$BOT_TOKEN\"|g" bot.py
-
-# ---------------- Python Requirements ----------------
 pip3 install --upgrade pip
-if [ -f requirements.txt ]; then
-    pip3 install -r requirements.txt
-else
-    pip3 install discord.py docker apscheduler
-fi
+pip3 install -r requirements.txt || pip3 install discord.py docker apscheduler
 
-echo "✅ Installation complete!"
-echo "📂 Your bot files are located in: $(pwd)"
-echo "▶️ Run the bot with: python3 bot.py"
+# Ask for token
+read -p "Enter your Discord bot token: " BOT_TOKEN
+sed -i "s|TOKEN = .*|TOKEN = \"$BOT_TOKEN\"|" bot.py
+
+echo "✅ Installation complete. Your bot.py is in: $(pwd)"
