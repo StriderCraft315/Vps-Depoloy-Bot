@@ -336,7 +336,13 @@ async def on_interaction(interaction: discord.Interaction):
 # ================= SCHEDULER =================
 scheduler = AsyncIOScheduler()
 scheduler.add_job(lambda: check_expired_vpses(), 'interval', minutes=5)
-scheduler.start()
+
+# ================= START BOT =================
+@bot.event
+async def on_ready():
+    await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
+    print("Bot is Online ✅")
+    scheduler.start()  # start scheduler after bot loop is running
 
 def check_expired_vpses():
     now = datetime.utcnow().isoformat()
@@ -353,11 +359,5 @@ def check_expired_vpses():
                 asyncio.create_task(channel.send(f"⏰ VPS#{vps_number} for <@{user_id}> expired. Renewal needed."))
         except Exception:
             continue
-
-# ================= START BOT =================
-@bot.event
-async def on_ready():
-    await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
-    print("Bot is Online ✅")
 
 bot.run(TOKEN)
